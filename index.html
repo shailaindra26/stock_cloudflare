@@ -402,9 +402,67 @@
     .sidebar { width: 180px; min-width: 180px; }
     .cards-grid.two-col { grid-template-columns: 1fr; }
   }
+
+  /* ── Mobile ───────────────────────────────────────────── */
   @media (max-width: 640px) {
-    .sidebar { display: none; }
-    .main { padding: 12px; }
+    .sidebar {
+      position: fixed;
+      top: 0; left: 0;
+      width: 85vw;
+      max-width: 320px;
+      height: 100vh;
+      z-index: 300;
+      transform: translateX(-100%);
+      transition: transform .25s ease;
+      box-shadow: 4px 0 24px rgba(0,0,0,.5);
+    }
+    .sidebar.open { transform: translateX(0); }
+    .sidebar-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.55);
+      z-index: 299;
+    }
+    .sidebar-overlay.open { display: block; }
+    .shell { display: block; height: auto; }
+    .main  { padding: 10px; padding-bottom: 80px; }
+    .top-bar h1 { font-size: 15px; }
+    .top-bar p  { display: none; }
+    .mobile-nav {
+      display: flex;
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: 60px;
+      background: var(--card);
+      border-top: 1px solid var(--border);
+      z-index: 200;
+    }
+    .mobile-nav-btn {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 10px;
+      font-family: var(--sans);
+      cursor: pointer;
+      transition: color .15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .mobile-nav-btn .nav-icon { font-size: 20px; line-height: 1; }
+    .mobile-nav-btn.active    { color: var(--green); }
+    .refresh-btn span:last-child { display: none; }
+    .ticker-wrap { height: 30px; }
+    .tick-item   { padding: 0 12px; font-size: 10px; }
+  }
+  @media (min-width: 641px) {
+    .mobile-nav      { display: none; }
+    .sidebar-overlay { display: none !important; }
   }
 </style>
 </head>
@@ -428,6 +486,7 @@
   <div class="ticker-tape" id="tickerTape"></div>
 </div>
 
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
 <div class="shell">
   <!-- Sidebar -->
   <aside class="sidebar">
@@ -465,7 +524,7 @@
     <div class="top-bar">
       <div>
         <h1>📈 Pro Stock Dashboard</h1>
-        <p>Indian equities ·. Candlesticks, SMA & RSI · Yahoo Finance data</p>
+        <p>Indian equities · Candlesticks, SMA & RSI · Yahoo Finance data</p>
       </div>
       <button class="refresh-btn" id="refreshBtn">
         <span class="spin-icon">↻</span> Refresh
@@ -480,6 +539,22 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- Mobile bottom nav -->
+<nav class="mobile-nav" id="mobileNav">
+  <button class="mobile-nav-btn" id="mNavStocks" onclick="openMobileSidebar()">
+    <span class="nav-icon">☰</span>
+    <span>Stocks</span>
+  </button>
+  <button class="mobile-nav-btn active" id="mNavOverview" onclick="loadOverview();setMobileNavActive('mNavOverview')">
+    <span class="nav-icon">⊞</span>
+    <span>Overview</span>
+  </button>
+  <button class="mobile-nav-btn" id="mNavRefresh" onclick="document.getElementById('refreshBtn').click()">
+    <span class="nav-icon">↻</span>
+    <span>Refresh</span>
+  </button>
+</nav>
 
 <script>
 /* ═══════════════════════════════════════════════════════════════
@@ -545,7 +620,7 @@ const cache = {};               // ticker → data
    CORS PROXY + YAHOO FINANCE FETCH
    Uses allorigins.win as a transparent CORS proxy
 ═══════════════════════════════════════════════════════════════ */
-const PROXY_BASE = 'https://stock1.shailaindra-mail.workers.dev/chart/';
+const PROXY_BASE = 'https://stock-proxy.YOUR-SUBDOMAIN.workers.dev/chart/';
 
 function yahooUrl(ticker, period) {
   return `${PROXY_BASE}${encodeURIComponent(ticker)}?range=${period}&interval=1d`;
@@ -1082,6 +1157,34 @@ window.addEventListener('resize', () => {
 ═══════════════════════════════════════════════════════════════ */
 buildSidebar();
 buildTickerTape();
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE SIDEBAR FUNCTIONS
+═══════════════════════════════════════════════════════════════ */
+function openMobileSidebar() {
+  document.querySelector('.sidebar').classList.add('open');
+  document.getElementById('sidebarOverlay').classList.add('open');
+}
+function closeMobileSidebar() {
+  document.querySelector('.sidebar').classList.remove('open');
+  document.getElementById('sidebarOverlay').classList.remove('open');
+}
+function setMobileNavActive(id) {
+  document.querySelectorAll('.mobile-nav-btn').forEach(b => b.classList.remove('active'));
+  const el = document.getElementById(id);
+  if (el) el.classList.add('active');
+}
+
+// Close sidebar when tapping overlay
+document.getElementById('sidebarOverlay').addEventListener('click', closeMobileSidebar);
+
+// Close sidebar and navigate when a stock is tapped on mobile
+const origSelectStock = selectStock;
+window.selectStock = function(name, ticker) {
+  closeMobileSidebar();
+  setMobileNavActive('mNavStocks');
+  return origSelectStock(name, ticker);
+};
 
 // Load first stock on start
 const [[firstName, firstTicker]] = Object.entries(ALL_STOCKS);
