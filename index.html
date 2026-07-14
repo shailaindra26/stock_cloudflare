@@ -620,7 +620,7 @@ const cache = {};               // ticker → data
    CORS PROXY + YAHOO FINANCE FETCH
    Uses allorigins.win as a transparent CORS proxy
 ═══════════════════════════════════════════════════════════════ */
-const PROXY_BASE = 'https://stock-proxy.YOUR-SUBDOMAIN.workers.dev/chart/';
+const PROXY_BASE = 'https://stock1.shailaindra-mail.workers.dev/chart/';
 
 function yahooUrl(ticker, period) {
   return `${PROXY_BASE}${encodeURIComponent(ticker)}?range=${period}&interval=1d`;
