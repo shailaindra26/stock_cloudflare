@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Pro Stock Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet"/>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  /* ── Reset & Base ─────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0A0E1A;
+    --card:      #111827;
+    --card2:     #1A2035;
+    --border:    #1E2D45;
+    --green:     #00D4AA;
+    --red:       #FF4560;
+    --gold:      #F5A623;
+    --blue:      #4299E1;
+    --text:      #E2E8F0;
+    --muted:     #64748B;
+    --mono:      'JetBrains Mono', monospace;
+    --sans:      'Inter', sans-serif;
+  }
+
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; }
+
+  /* ── Ticker Tape ──────────────────────────────────────── */
+  .ticker-wrap {
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    overflow: hidden;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .ticker-tape {
+    display: flex;
+    gap: 0;
+    white-space: nowrap;
+    animation: scroll-left 120s linear infinite;
+  }
+  .ticker-tape:hover { animation-play-state: paused; }
+  @keyframes scroll-left {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+  .tick-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 20px;
+    font-family: var(--mono);
+    font-size: 11px;
+    border-right: 1px solid var(--border);
+  }
+  .tick-sym  { color: var(--text); font-weight: 700; letter-spacing: .05em; }
+  .tick-price{ color: var(--muted); }
+  .tick-chg  { font-weight: 500; }
+  .tick-chg.up   { color: var(--green); }
+  .tick-chg.down { color: var(--red); }
+
+  /* ── Layout ───────────────────────────────────────────── */
+  .shell { display: flex; height: calc(100vh - 36px); }
+
+  /* ── Sidebar ──────────────────────────────────────────── */
+  .sidebar {
+    width: 230px;
+    min-width: 230px;
+    background: var(--card);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .sidebar-header {
+    padding: 16px 14px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-header h2 {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  .search-box {
+    width: 100%;
+    background: var(--card2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 13px;
+    padding: 7px 10px;
+    outline: none;
+    transition: border-color .2s;
+  }
+  .search-box:focus { border-color: var(--green); }
+  .search-box::placeholder { color: var(--muted); }
+
+  .sidebar-controls {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .ctrl-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .ctrl-row label { cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .toggle {
+    appearance: none;
+    width: 28px; height: 15px;
+    background: var(--border);
+    border-radius: 99px;
+    position: relative;
+    cursor: pointer;
+    transition: background .2s;
+    flex-shrink: 0;
+  }
+  .toggle:checked { background: var(--green); }
+  .toggle::after {
+    content: '';
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 11px; height: 11px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform .2s;
+  }
+  .toggle:checked::after { transform: translateX(13px); }
+
+  .period-btns {
+    display: flex;
+    gap: 4px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .period-btn {
+    flex: 1;
+    padding: 4px 0;
+    background: var(--card2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .period-btn:hover    { border-color: var(--green); color: var(--text); }
+  .period-btn.active   { background: var(--green); border-color: var(--green); color: #000; font-weight: 700; }
+
+  .stock-list {
+    overflow-y: auto;
+    flex: 1;
+    padding: 8px 0;
+  }
+  .stock-list::-webkit-scrollbar { width: 4px; }
+  .stock-list::-webkit-scrollbar-track { background: transparent; }
+  .stock-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .section-label {
+    padding: 10px 14px 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .stock-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 14px;
+    cursor: pointer;
+    transition: background .15s;
+    border-left: 3px solid transparent;
+    gap: 8px;
+  }
+  .stock-item:hover  { background: var(--card2); }
+  .stock-item.active { background: rgba(0,212,170,.08); border-left-color: var(--green); }
+  .stock-item.overview-active { background: rgba(0,212,170,.04); border-left-color: var(--green); }
+  .si-name  { font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .si-chg   { font-family: var(--mono); font-size: 11px; font-weight: 600; flex-shrink: 0; }
+  .si-chg.up   { color: var(--green); }
+  .si-chg.down { color: var(--red); }
+
+  .overview-btn {
+    margin: 8px 14px;
+    padding: 8px;
+    background: rgba(0,212,170,.1);
+    border: 1px solid rgba(0,212,170,.3);
+    border-radius: 6px;
+    color: var(--green);
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: all .15s;
+  }
+  .overview-btn:hover { background: rgba(0,212,170,.2); }
+
+  /* ── Main Content ─────────────────────────────────────── */
+  .main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+  }
+  .main::-webkit-scrollbar { width: 6px; }
+  .main::-webkit-scrollbar-track { background: transparent; }
+  .main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .top-bar h1 {
+    font-size: 20px;
+    font-weight: 700;
+    background: linear-gradient(90deg, var(--green), var(--blue));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .top-bar p { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .refresh-btn {
+    background: var(--card2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 12px;
+    padding: 7px 14px;
+    cursor: pointer;
+    transition: all .15s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .refresh-btn:hover { border-color: var(--green); color: var(--green); }
+  .refresh-btn.spinning .spin-icon { animation: spin .8s linear infinite; display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Cards Grid ───────────────────────────────────────── */
+  .cards-grid {
+    display: grid;
+    gap: 16px;
+  }
+  .cards-grid.two-col { grid-template-columns: 1fr 1fr; }
+  .cards-grid.one-col { grid-template-columns: 1fr; }
+
+  /* ── Stock Card ───────────────────────────────────────── */
+  .stock-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .card-header {
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .card-title { font-size: 13px; font-weight: 600; color: var(--text); }
+  .card-ticker { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .card-price-block { text-align: right; flex-shrink: 0; }
+  .card-price { font-family: var(--mono); font-size: 18px; font-weight: 700; }
+  .card-price.up   { color: var(--green); }
+  .card-price.down { color: var(--red); }
+  .card-chg   { font-family: var(--mono); font-size: 11px; font-weight: 600; margin-top: 2px; }
+  .card-chg.up   { color: var(--green); }
+  .card-chg.down { color: var(--red); }
+
+  .metrics-row {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+  }
+  .metric {
+    flex: 1;
+    padding: 10px 16px;
+    border-right: 1px solid var(--border);
+  }
+  .metric:last-child { border-right: none; }
+  .metric-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  .metric-value { font-family: var(--mono); font-size: 14px; font-weight: 600; margin-top: 3px; }
+  .metric-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    font-family: var(--mono);
+    margin-top: 3px;
+  }
+  .badge-overbought { background: rgba(255,69,96,.15); color: var(--red); }
+  .badge-oversold   { background: rgba(0,212,170,.15); color: var(--green); }
+  .badge-neutral    { background: rgba(245,166,35,.15); color: var(--gold); }
+
+  .chart-container { height: 280px; position: relative; }
+  .chart-inner { width: 100%; height: 100%; }
+
+  /* RSI panel */
+  .rsi-panel {
+    height: 80px;
+    border-top: 1px solid var(--border);
+    position: relative;
+    padding: 0;
+  }
+  .rsi-label {
+    position: absolute;
+    top: 4px; left: 8px;
+    font-size: 9px;
+    font-family: var(--mono);
+    color: var(--muted);
+    z-index: 2;
+    pointer-events: none;
+  }
+  .rsi-canvas { width: 100%; height: 100%; display: block; }
+
+  /* ── Error card ───────────────────────────────────────── */
+  .error-card {
+    background: var(--card);
+    border: 1px solid rgba(255,69,96,.3);
+    border-radius: 10px;
+    padding: 20px;
+    color: var(--red);
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  /* ── Loading skeleton ─────────────────────────────────── */
+  .skeleton {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .skel-block {
+    height: 16px;
+    background: linear-gradient(90deg, var(--card2) 25%, var(--border) 50%, var(--card2) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s infinite;
+    border-radius: 4px;
+    margin: 12px 16px;
+  }
+  @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+  /* ── Toast ────────────────────────────────────────────── */
+  .toast {
+    position: fixed;
+    bottom: 24px; right: 24px;
+    background: var(--card2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 18px;
+    font-size: 13px;
+    color: var(--text);
+    z-index: 999;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all .25s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+
+  /* ── Footer ───────────────────────────────────────────── */
+  .footer {
+    margin-top: 24px;
+    padding: 12px 0;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+  }
+
+  @media (max-width: 900px) {
+    .sidebar { width: 180px; min-width: 180px; }
+    .cards-grid.two-col { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 640px) {
+    .sidebar { display: none; }
+    .main { padding: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Proxy banner -->
+<div id="proxyBanner" style="
+  display:none; background:#1a1000; border-bottom:1px solid #f5a623;
+  padding:10px 20px; font-size:13px; color:#f5a623;
+  font-family:'JetBrains Mono',monospace; align-items:center; gap:12px;">
+  ⚠ Proxy not running &nbsp;—&nbsp;
+  open a terminal in the same folder and run: &nbsp;
+  <code style="background:#000;padding:2px 8px;border-radius:4px;color:#fff">python proxy.py</code>
+  &nbsp; then refresh this page.
+  <span onclick="document.getElementById('proxyBanner').style.display='none'"
+        style="margin-left:auto;cursor:pointer;opacity:.6">✕</span>
+</div>
+
+<!-- Ticker tape -->
+<div class="ticker-wrap">
+  <div class="ticker-tape" id="tickerTape"></div>
+</div>
+
+<div class="shell">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <h2>Stock Index</h2>
+      <input class="search-box" id="searchBox" type="text" placeholder="Search stocks…"/>
+    </div>
+
+    <div class="sidebar-controls">
+      <div class="ctrl-row">
+        <label><input class="toggle" type="checkbox" id="togSma10" checked> 10-Day SMA</label>
+      </div>
+      <div class="ctrl-row">
+        <label><input class="toggle" type="checkbox" id="togSma20" checked> 20-Day SMA</label>
+      </div>
+      <div class="ctrl-row">
+        <label><input class="toggle" type="checkbox" id="togVolume" checked> Volume</label>
+      </div>
+    </div>
+
+    <div class="period-btns" id="periodBtns">
+      <button class="period-btn" data-period="1mo">1M</button>
+      <button class="period-btn active" data-period="3mo">3M</button>
+      <button class="period-btn" data-period="6mo">6M</button>
+      <button class="period-btn" data-period="1y">1Y</button>
+    </div>
+
+    <button class="overview-btn" id="overviewBtn">⊞ Overview (All)</button>
+
+    <div class="stock-list" id="stockList"></div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main" id="main">
+    <div class="top-bar">
+      <div>
+        <h1>📈 Pro Stock Dashboard</h1>
+        <p>Indian equities · Candlesticks, SMA & RSI · Yahoo Finance data</p>
+      </div>
+      <button class="refresh-btn" id="refreshBtn">
+        <span class="spin-icon">↻</span> Refresh
+      </button>
+    </div>
+    <div class="cards-grid one-col" id="cardsGrid"></div>
+    <div class="footer">
+      <span id="footerTs">—</span>
+      <span>Data via Yahoo Finance · Hover ticker tape to pause</span>
+    </div>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   STOCK UNIVERSE
+═══════════════════════════════════════════════════════════════ */
+const STOCKS = {
+  "Original": {
+    "Paras Defence & Space Tech":"PARAS.NS","Data Patterns India":"DATAPATTNS.NS",
+    "PTC Industries":"PTCIL.NS","Servotech Power Systems":"SERVOTECH.NS",
+    "Vedanta Ltd":"VEDL.NS","Multi Commodity Exchange":"MCX.NS","NMDC Ltd":"NMDC.NS",
+    "IFCI Ltd":"IFCI.NS","Pro Fin Capital":"511557.BO","Bartronics India":"ASMS.NS",
+    "Goldstar Power":"GOLDSTAR.NS","Zee Media":"ZEEMEDIA.NS","KPIT Technologies":"KPITTECH.NS",
+    "JBM Auto Ltd":"JBMA.NS","SPML Infra Ltd":"SPMLINFRA.NS","KNR Constructions":"KNRCON.NS"
+  },
+  "Defence & Aviation": {
+    "HAL":"HAL.NS","Bharat Electronics":"BEL.NS","Bharat Dynamics":"BDL.NS",
+    "Mazagon Dock":"MAZDOCK.NS","Cochin Shipyard":"COCHINSHIP.NS","Zen Technologies":"ZENTEC.NS",
+    "Astra Microwave":"ASTRAMICRO.NS","MTAR Technologies":"MTARTECH.NS",
+    "Garden Reach Shipbuilders":"GRSE.NS","Mishra Dhatu Nigam":"MIDHANI.NS"
+  },
+  "Banking & Finance": {
+    "SBI":"SBIN.NS","Bank of Baroda":"BANKBARODA.NS","Canara Bank":"CANBK.NS",
+    "UCO Bank":"UCOBANK.NS","Union Bank":"UNIONBANK.NS","Central Bank":"CENTRALBK.NS",
+    "Bank of Maharashtra":"MAHABANK.NS","Bank of India":"BANKINDIA.NS",
+    "Punjab & Sind Bank":"PSB.NS","IOB":"IOB.NS","Indian Bank":"INDIANB.NS",
+    "PNB":"PNB.NS","GIC Re":"GICRE.NS","LIC":"LICI.NS","New India Assurance":"NIACL.NS",
+    "PFC":"PFC.NS","REC Ltd":"RECLTD.NS","IRFC":"IRFC.NS","HUDCO":"HUDCO.NS"
+  },
+  "Energy": {
+    "BPCL":"BPCL.NS","HPCL":"HINDPETRO.NS","IOC":"IOC.NS","Oil India":"OIL.NS",
+    "ONGC":"ONGC.NS","MRPL":"MRPL.NS","NTPC":"NTPC.NS","Coal India":"COALINDIA.NS",
+    "SJVN":"SJVN.NS","NHPC":"NHPC.NS","GAIL":"GAIL.NS","Gujarat Gas":"GUJGASLTD.NS",
+    "Power Grid":"POWERGRID.NS"
+  },
+  "Metals & Heavy Eng": {
+    "MMTC":"MMTC.NS","SAIL":"SAIL.NS","NALCO":"NATIONALUM.NS","Hindustan Copper":"HINDCOPPER.NS",
+    "NLC India":"NLCINDIA.NS","KIOCL":"KIOCL.NS","BHEL":"BHEL.NS",
+    "Engineers India":"ENGINERSIN.NS","L&T":"LT.NS"
+  },
+  "Railways & Infra": {
+    "Ircon":"IRCON.NS","CONCOR":"CONCOR.NS","NBCC":"NBCC.NS","IRCTC":"IRCTC.NS",
+    "RITES":"RITES.NS","RVNL":"RVNL.NS"
+  },
+  "Others": {
+    "RCF":"RCF.NS","ITI Ltd":"ITI.NS"
+  }
+};
+
+// Flat map  name → ticker
+const ALL_STOCKS = {};
+for (const [,map] of Object.entries(STOCKS)) Object.assign(ALL_STOCKS, map);
+
+/* ═══════════════════════════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════════════════════════ */
+let currentMode   = 'single';   // 'single' | 'overview'
+let currentStock  = null;       // { name, ticker }
+let currentPeriod = '3mo';
+let showSma10  = true, showSma20 = true, showVol = true;
+const cache = {};               // ticker → data
+
+/* ═══════════════════════════════════════════════════════════════
+   CORS PROXY + YAHOO FINANCE FETCH
+   Uses allorigins.win as a transparent CORS proxy
+═══════════════════════════════════════════════════════════════ */
+const PROXY_BASE = 'https://stock1.shailaindra-mail.workers.dev/';
+
+function yahooUrl(ticker, period) {
+  return `${PROXY_BASE}${encodeURIComponent(ticker)}?range=${period}&interval=1d`;
+}
+
+async function fetchStock(ticker, period) {
+  const key = `${ticker}|${period}`;
+  if (cache[key]) return cache[key];
+
+  let res;
+  try {
+    res = await fetch(yahooUrl(ticker, period));
+    document.getElementById('proxyBanner').style.display = 'none'; // proxy OK
+  } catch (e) {
+    document.getElementById('proxyBanner').style.display = 'flex';
+    throw new Error('Cannot reach proxy — is proxy.py running? (python proxy.py)');
+  }
+  if (!res.ok) throw new Error(`Yahoo Finance returned HTTP ${res.status}`);
+  const json = await res.json();
+  const result = json?.chart?.result?.[0];
+  if (!result) throw new Error('No data returned for this ticker');
+
+  const ts     = result.timestamp;
+  const quote  = result.indicators.quote[0];
+  const opens  = quote.open, highs = quote.high, lows = quote.low;
+  const closes = quote.close, vols  = quote.volume;
+
+  // Filter out nulls
+  const rows = [];
+  for (let i = 0; i < ts.length; i++) {
+    if (closes[i] == null) continue;
+    rows.push({
+      time:   ts[i],
+      open:   opens[i]  ?? closes[i],
+      high:   highs[i]  ?? closes[i],
+      low:    lows[i]   ?? closes[i],
+      close:  closes[i],
+      volume: vols[i]   ?? 0,
+    });
+  }
+
+  // SMA helper
+  function sma(arr, w) {
+    return arr.map((_, i) =>
+      i < w - 1 ? null : arr.slice(i - w + 1, i + 1).reduce((a, b) => a + b, 0) / w
+    );
+  }
+
+  const closesArr = rows.map(r => r.close);
+  const sma10arr  = sma(closesArr, 10);
+  const sma20arr  = sma(closesArr, 20);
+
+  // RSI-14
+  const rsiArr = (() => {
+    const deltas = closesArr.map((c, i) => i === 0 ? 0 : c - closesArr[i - 1]);
+    const gains  = deltas.map(d => d > 0 ? d : 0);
+    const losses = deltas.map(d => d < 0 ? -d : 0);
+    const out = new Array(closesArr.length).fill(null);
+    if (closesArr.length < 15) return out;
+    let avgG = gains.slice(1, 15).reduce((a, b) => a + b, 0) / 14;
+    let avgL = losses.slice(1, 15).reduce((a, b) => a + b, 0) / 14;
+    out[14] = avgL === 0 ? 100 : 100 - 100 / (1 + avgG / avgL);
+    for (let i = 15; i < closesArr.length; i++) {
+      avgG = (avgG * 13 + gains[i])  / 14;
+      avgL = (avgL * 13 + losses[i]) / 14;
+      out[i] = avgL === 0 ? 100 : 100 - 100 / (1 + avgG / avgL);
+    }
+    return out;
+  })();
+
+  rows.forEach((r, i) => {
+    r.sma10 = sma10arr[i];
+    r.sma20 = sma20arr[i];
+    r.rsi   = rsiArr[i];
+  });
+
+  // Meta
+  const meta   = result.meta;
+  const latest = rows[rows.length - 1];
+  const prev   = rows.length > 1 ? rows[rows.length - 2] : latest;
+  const pct    = ((latest.close - prev.close) / prev.close) * 100;
+  const latestRsi = [...rsiArr].reverse().find(v => v !== null) ?? null;
+
+  const data = { rows, meta, latest, pct, latestRsi, currency: meta.currency ?? '₹' };
+  cache[key] = data;
+  return data;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SIDEBAR BUILDING
+═══════════════════════════════════════════════════════════════ */
+const stockListEl = document.getElementById('stockList');
+
+function buildSidebar(filter = '') {
+  stockListEl.innerHTML = '';
+  const fl = filter.toLowerCase();
+  for (const [section, map] of Object.entries(STOCKS)) {
+    const entries = Object.entries(map).filter(([n]) => n.toLowerCase().includes(fl));
+    if (!entries.length) continue;
+    const lbl = document.createElement('div');
+    lbl.className = 'section-label';
+    lbl.textContent = section;
+    stockListEl.appendChild(lbl);
+    for (const [name, ticker] of entries) {
+      const item = document.createElement('div');
+      item.className = 'stock-item';
+      item.dataset.name   = name;
+      item.dataset.ticker = ticker;
+      item.innerHTML = `
+        <div class="si-name">${name}</div>
+        <div class="si-chg" id="si-${ticker}">—</div>`;
+      item.addEventListener('click', () => selectStock(name, ticker));
+      stockListEl.appendChild(item);
+    }
+  }
+}
+
+function updateSidebarItem(ticker, pct) {
+  const el = document.getElementById(`si-${ticker}`);
+  if (!el) return;
+  const up = pct >= 0;
+  el.textContent = `${up ? '+' : ''}${pct.toFixed(2)}%`;
+  el.className = `si-chg ${up ? 'up' : 'down'}`;
+}
+
+function setActiveSidebarItem(ticker, overview = false) {
+  document.querySelectorAll('.stock-item').forEach(el => {
+    el.classList.remove('active', 'overview-active');
+  });
+  if (overview) {
+    document.querySelectorAll('.stock-item').forEach(el => el.classList.add('overview-active'));
+  } else {
+    const el = document.querySelector(`.stock-item[data-ticker="${ticker}"]`);
+    if (el) el.classList.add('active');
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TICKER TAPE
+═══════════════════════════════════════════════════════════════ */
+async function buildTickerTape() {
+  const tape = document.getElementById('tickerTape');
+  const entries = Object.entries(ALL_STOCKS);
+  const seg = document.createDocumentFragment();
+
+  // We duplicate to make seamless loop
+  const makeItems = () => entries.map(([name, ticker]) => {
+    const span = document.createElement('span');
+    span.className = 'tick-item';
+    span.innerHTML = `<span class="tick-sym">${ticker.replace('.NS','').replace('.BO','')}</span>
+      <span class="tick-price" id="tp-${ticker}">—</span>
+      <span class="tick-chg" id="tc-${ticker}">—</span>`;
+    return span;
+  });
+
+  const items1 = makeItems();
+  const items2 = makeItems(); // duplicate for seamless loop
+  [...items1, ...items2].forEach(el => seg.appendChild(el));
+  tape.innerHTML = '';
+  tape.appendChild(seg);
+
+  // Load a sample of tickers for the tape (first 20 to keep it snappy)
+  const sample = entries.slice(0, 20);
+  for (const [, ticker] of sample) {
+    try {
+      const data = await fetchStock(ticker, '1mo');
+      const up   = data.pct >= 0;
+      // Update both duplicates
+      document.querySelectorAll(`#tp-${ticker}`).forEach(el => {
+        el.textContent = `₹${data.latest.close.toFixed(2)}`;
+      });
+      document.querySelectorAll(`#tc-${ticker}`).forEach(el => {
+        el.textContent = `${up ? '+' : ''}${data.pct.toFixed(2)}%`;
+        el.className = `tick-chg ${up ? 'up' : 'down'}`;
+      });
+      updateSidebarItem(ticker, data.pct);
+    } catch { /* silent */ }
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RSI CANVAS RENDERER
+═══════════════════════════════════════════════════════════════ */
+function drawRsiCanvas(canvas, rows) {
+  const dpr    = window.devicePixelRatio || 1;
+  const W      = canvas.offsetWidth;
+  const H      = canvas.offsetHeight;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const valid = rows.filter(r => r.rsi !== null);
+  if (!valid.length) return;
+
+  const vals = valid.map(r => r.rsi);
+  const mn = 0, mx = 100;
+  const toY = v => H - ((v - mn) / (mx - mn)) * H;
+
+  // OB / OS zones
+  ctx.fillStyle = 'rgba(255,69,96,0.07)';
+  ctx.fillRect(0, toY(70), W, toY(30) - toY(70));
+
+  // 70 / 30 lines
+  ctx.strokeStyle = 'rgba(255,69,96,0.3)';
+  ctx.lineWidth   = 0.5;
+  [70, 30].forEach(v => {
+    ctx.beginPath(); ctx.moveTo(0, toY(v)); ctx.lineTo(W, toY(v)); ctx.stroke();
+  });
+  // 50 line
+  ctx.strokeStyle = 'rgba(100,116,139,0.25)';
+  ctx.beginPath(); ctx.moveTo(0, toY(50)); ctx.lineTo(W, toY(50)); ctx.stroke();
+
+  // RSI line
+  const xStep = W / (valid.length - 1 || 1);
+  ctx.beginPath();
+  ctx.strokeStyle = '#A78BFA';
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin  = 'round';
+  valid.forEach((r, i) => {
+    const x = i * xStep, y = toY(r.rsi);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  // Fill under RSI
+  ctx.lineTo((valid.length - 1) * xStep, H);
+  ctx.lineTo(0, H);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(167,139,250,0.06)';
+  ctx.fill();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CARD RENDERER
+═══════════════════════════════════════════════════════════════ */
+function fmtVol(v) {
+  if (v >= 1e7) return `${(v/1e7).toFixed(2)}Cr`;
+  if (v >= 1e5) return `${(v/1e5).toFixed(2)}L`;
+  return v.toLocaleString('en-IN');
+}
+
+function createSkeletonCard() {
+  const div = document.createElement('div');
+  div.className = 'skeleton';
+  div.innerHTML = `
+    <div class="skel-block" style="width:55%;height:18px;margin-top:16px"></div>
+    <div class="skel-block" style="width:30%;height:12px"></div>
+    <div class="skel-block" style="height:200px;margin:12px 16px"></div>
+    <div class="skel-block" style="width:70%;height:12px"></div>`;
+  return div;
+}
+
+function createErrorCard(name, ticker, msg) {
+  const div = document.createElement('div');
+  div.className = 'error-card';
+  div.innerHTML = `<span style="font-size:20px">⚠</span>
+    <div><strong>${name}</strong> (${ticker})<br>
+    <span style="color:var(--muted);font-size:12px">${msg}</span></div>`;
+  return div;
+}
+
+function createStockCard(name, ticker, data) {
+  const { rows, latest, pct, latestRsi } = data;
+  const up   = pct >= 0;
+  const rsiClass = latestRsi > 70 ? 'badge-overbought' : latestRsi < 30 ? 'badge-oversold' : 'badge-neutral';
+  const rsiLabel = latestRsi > 70 ? '⬆ Overbought' : latestRsi < 30 ? '⬇ Oversold' : '● Neutral';
+  const volDisplay = fmtVol(latest.volume);
+
+  const card = document.createElement('div');
+  card.className = 'stock-card';
+  card.innerHTML = `
+    <div class="card-header">
+      <div>
+        <div class="card-title">${name}</div>
+        <div class="card-ticker">${ticker}</div>
+      </div>
+      <div class="card-price-block">
+        <div class="card-price ${up?'up':'down'}">₹${latest.close.toFixed(2)}</div>
+        <div class="card-chg ${up?'up':'down'}">${up?'+':''}${pct.toFixed(2)}%</div>
+      </div>
+    </div>
+    <div class="metrics-row">
+      <div class="metric">
+        <div class="metric-label">High</div>
+        <div class="metric-value" style="color:var(--green)">₹${latest.high.toFixed(2)}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Low</div>
+        <div class="metric-value" style="color:var(--red)">₹${latest.low.toFixed(2)}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Volume</div>
+        <div class="metric-value">${volDisplay}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">RSI (14)</div>
+        <div class="metric-badge ${rsiClass}">${latestRsi !== null ? latestRsi.toFixed(1) : '—'} ${rsiLabel}</div>
+      </div>
+    </div>
+    <div class="chart-container"><div class="chart-inner" id="chart-${ticker.replace(/\./g,'_')}"></div></div>
+    <div class="rsi-panel">
+      <div class="rsi-label">RSI · purple  ── OB/OS zones</div>
+      <canvas class="rsi-canvas" id="rsi-${ticker.replace(/\./g,'_')}"></canvas>
+    </div>`;
+
+  return card;
+}
+
+const chartInstances = {};
+
+function mountChart(ticker, rows) {
+  const id  = ticker.replace(/\./g,'_');
+  const el  = document.getElementById(`chart-${id}`);
+  if (!el) return;
+
+  // Destroy old instance if any
+  if (chartInstances[id]) { chartInstances[id].remove(); delete chartInstances[id]; }
+
+  const chart = LightweightCharts.createChart(el, {
+    layout: { background: { color: 'transparent' }, textColor: '#64748B' },
+    grid:   { vertLines: { color: '#1E2D45' }, horzLines: { color: '#1E2D45' } },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    rightPriceScale: { borderColor: '#1E2D45' },
+    timeScale: { borderColor: '#1E2D45', timeVisible: true, secondsVisible: false },
+    handleScroll: true,
+    handleScale: true,
+  });
+
+  const candles = chart.addCandlestickSeries({
+    upColor: '#00D4AA', downColor: '#FF4560',
+    borderUpColor: '#00D4AA', borderDownColor: '#FF4560',
+    wickUpColor:   '#00D4AA', wickDownColor:   '#FF4560',
+  });
+  candles.setData(rows.map(r => ({
+    time: r.time, open: r.open, high: r.high, low: r.low, close: r.close
+  })));
+
+  if (showVol) {
+    const volSeries = chart.addHistogramSeries({
+      color: '#4299E1', priceFormat: { type: 'volume' },
+      priceScaleId: 'vol',
+    });
+    chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+    volSeries.setData(rows.map(r => ({
+      time:  r.time,
+      value: r.volume,
+      color: r.close >= r.open ? 'rgba(0,212,170,0.35)' : 'rgba(255,69,96,0.35)',
+    })));
+  }
+
+  if (showSma10) {
+    const s10 = chart.addLineSeries({ color: '#4299E1', lineWidth: 1.5, title: 'SMA10' });
+    s10.setData(rows.filter(r => r.sma10 !== null).map(r => ({ time: r.time, value: r.sma10 })));
+  }
+
+  if (showSma20) {
+    const s20 = chart.addLineSeries({ color: '#F5A623', lineWidth: 1.5, title: 'SMA20' });
+    s20.setData(rows.filter(r => r.sma20 !== null).map(r => ({ time: r.time, value: r.sma20 })));
+  }
+
+  chart.timeScale().fitContent();
+  chartInstances[id] = chart;
+
+  // RSI canvas
+  const canvas = document.getElementById(`rsi-${id}`);
+  if (canvas) {
+    // Wait for layout
+    setTimeout(() => drawRsiCanvas(canvas, rows), 50);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   VIEW RENDERERS
+═══════════════════════════════════════════════════════════════ */
+const grid = document.getElementById('cardsGrid');
+
+async function selectStock(name, ticker) {
+  currentMode  = 'single';
+  currentStock = { name, ticker };
+  grid.className = 'cards-grid one-col';
+  grid.innerHTML = '';
+  setActiveSidebarItem(ticker);
+
+  const skel = createSkeletonCard();
+  grid.appendChild(skel);
+
+  try {
+    const data = await fetchStock(ticker, currentPeriod);
+    grid.innerHTML = '';
+    const card = createStockCard(name, ticker, data);
+    grid.appendChild(card);
+    requestAnimationFrame(() => mountChart(ticker, data.rows));
+    updateSidebarItem(ticker, data.pct);
+    setFooterTs();
+  } catch (err) {
+    grid.innerHTML = '';
+    grid.appendChild(createErrorCard(name, ticker, err.message));
+  }
+}
+
+async function loadOverview() {
+  currentMode = 'overview';
+  currentStock = null;
+  grid.className = 'cards-grid two-col';
+  grid.innerHTML = '';
+  setActiveSidebarItem(null, true);
+
+  const entries = Object.entries(ALL_STOCKS);
+  showToast(`Loading ${entries.length} stocks…`);
+
+  // Build skeletons in pairs
+  for (let i = 0; i < entries.length; i++) {
+    grid.appendChild(createSkeletonCard());
+  }
+
+  // Fetch concurrently in batches of 6
+  const BATCH = 6;
+  const gridChildren = Array.from(grid.children);
+
+  for (let b = 0; b < entries.length; b += BATCH) {
+    const batch = entries.slice(b, b + BATCH);
+    await Promise.all(batch.map(async ([name, ticker], bi) => {
+      const idx = b + bi;
+      try {
+        const data = await fetchStock(ticker, currentPeriod);
+        if (currentMode !== 'overview') return; // user navigated away
+        const card = createStockCard(name, ticker, data);
+        gridChildren[idx].replaceWith(card);
+        updateSidebarItem(ticker, data.pct);
+        requestAnimationFrame(() => mountChart(ticker, data.rows));
+      } catch (err) {
+        gridChildren[idx].replaceWith(createErrorCard(name, ticker, err.message));
+      }
+    }));
+    if (currentMode !== 'overview') return;
+  }
+  hideToast();
+  setFooterTs();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PERIOD / TOGGLE CONTROLS
+═══════════════════════════════════════════════════════════════ */
+document.getElementById('periodBtns').addEventListener('click', async e => {
+  const btn = e.target.closest('.period-btn');
+  if (!btn) return;
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentPeriod = btn.dataset.period;
+  // Clear cache for new period and re-render
+  for (const k of Object.keys(cache)) { if (k.endsWith(`|${currentPeriod}`)) delete cache[k]; }
+  if (currentMode === 'overview') loadOverview();
+  else if (currentStock) selectStock(currentStock.name, currentStock.ticker);
+});
+
+['togSma10','togSma20','togVolume'].forEach(id => {
+  document.getElementById(id).addEventListener('change', () => {
+    showSma10 = document.getElementById('togSma10').checked;
+    showSma20 = document.getElementById('togSma20').checked;
+    showVol   = document.getElementById('togVolume').checked;
+    // Remount charts with new settings
+    const entries = currentMode === 'overview'
+      ? Object.entries(ALL_STOCKS)
+      : currentStock ? [[currentStock.name, currentStock.ticker]] : [];
+    entries.forEach(([, ticker]) => {
+      const key  = `${ticker}|${currentPeriod}`;
+      const data = cache[key];
+      if (data) mountChart(ticker, data.rows);
+    });
+  });
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   SEARCH
+═══════════════════════════════════════════════════════════════ */
+document.getElementById('searchBox').addEventListener('input', e => {
+  buildSidebar(e.target.value);
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   OVERVIEW + REFRESH BUTTONS
+═══════════════════════════════════════════════════════════════ */
+document.getElementById('overviewBtn').addEventListener('click', loadOverview);
+
+document.getElementById('refreshBtn').addEventListener('click', () => {
+  Object.keys(cache).forEach(k => delete cache[k]);
+  const btn = document.getElementById('refreshBtn');
+  btn.classList.add('spinning');
+  const done = () => btn.classList.remove('spinning');
+  if (currentMode === 'overview') loadOverview().then(done).catch(done);
+  else if (currentStock) selectStock(currentStock.name, currentStock.ticker).then(done).catch(done);
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   TOAST + FOOTER
+═══════════════════════════════════════════════════════════════ */
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+}
+function hideToast() {
+  const t = document.getElementById('toast');
+  t.classList.remove('show');
+}
+function setFooterTs() {
+  document.getElementById('footerTs').textContent =
+    `Last updated: ${new Date().toLocaleString('en-IN')}`;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RESIZE HANDLER — redraw RSI canvases
+═══════════════════════════════════════════════════════════════ */
+window.addEventListener('resize', () => {
+  const entries = currentMode === 'overview'
+    ? Object.entries(ALL_STOCKS)
+    : currentStock ? [[currentStock.name, currentStock.ticker]] : [];
+  entries.forEach(([, ticker]) => {
+    const key = `${ticker}|${currentPeriod}`;
+    const data = cache[key];
+    if (!data) return;
+    const id = ticker.replace(/\./g,'_');
+    const canvas = document.getElementById(`rsi-${id}`);
+    if (canvas) drawRsiCanvas(canvas, data.rows);
+    if (chartInstances[id]) chartInstances[id].timeScale().fitContent();
+  });
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════════════════════════ */
+buildSidebar();
+buildTickerTape();
+
+// Load first stock on start
+const [[firstName, firstTicker]] = Object.entries(ALL_STOCKS);
+selectStock(firstName, firstTicker);
+</script>
+</body>
+</html>
